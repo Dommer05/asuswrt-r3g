@@ -11,6 +11,7 @@ This is modified version of AsusWrt that works with Xiaomi Mi R3G router.
 
 ## Important notes
 - First boot after takes some minutes, don't interrupt it
+- I do not take responsibility of any damages - you do everything on your own risk
 
 ## Missing features
 - No repeater support
