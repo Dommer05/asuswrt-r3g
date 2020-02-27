@@ -47,31 +47,6 @@ UCHAR RtmpEepromGetDefault(
 	IN RTMP_ADAPTER 	*pAd)
 {
 	UCHAR e2p_default = E2P_FLASH_MODE;
-
-#if defined (DRIVER_HAS_MULTI_DEV)
-	if ( pAd->dev_idx == 0 )
-	{
-		if ( RTMPEqualMemory("efuse", CONFIG_RT_FIRST_CARD_EEPROM, 5) )
-			e2p_default = E2P_EFUSE_MODE;
-		if ( RTMPEqualMemory("prom", CONFIG_RT_FIRST_CARD_EEPROM, 4) )
-			e2p_default = E2P_EEPROM_MODE;
-		if ( RTMPEqualMemory("flash", CONFIG_RT_FIRST_CARD_EEPROM, 5) )
-			e2p_default = E2P_FLASH_MODE;
-		goto out;	
-	}
-
-	if ( pAd->dev_idx == 1 )
-	{
-		if ( RTMPEqualMemory("efuse", CONFIG_RT_SECOND_CARD_EEPROM, 5) )
-			e2p_default = E2P_EFUSE_MODE;
-		if ( RTMPEqualMemory("prom", CONFIG_RT_SECOND_CARD_EEPROM, 4) )
-			e2p_default = E2P_EEPROM_MODE;
-		if ( RTMPEqualMemory("flash", CONFIG_RT_SECOND_CARD_EEPROM, 5) )
-			e2p_default = E2P_FLASH_MODE;
-		goto out;	
-	}
-out:
-#endif
 	DBGPRINT(RT_DEBUG_OFF, ("%s::e2p_default=%d\n", __FUNCTION__, e2p_default));
 	return e2p_default;
 }
@@ -187,12 +162,6 @@ INT RtmpChipOpsEepromHook(
 			pChipOps->eeread = rtmp_ee_flash_read;
 			pChipOps->eewrite = rtmp_ee_flash_write;
 			pAd->flash_offset = DEFAULT_RF_OFFSET;
-#if defined (DRIVER_HAS_MULTI_DEV)
-			if ( pAd->dev_idx == 0 )
-				pAd->flash_offset = CONFIG_RT_FIRST_IF_RF_OFFSET;
-			if ( pAd->dev_idx == 1 )
-				pAd->flash_offset = CONFIG_RT_SECOND_IF_RF_OFFSET;
-#endif
 			DBGPRINT(RT_DEBUG_OFF, ("NVM is FLASH mode\n"));
 			return 0;
 		}

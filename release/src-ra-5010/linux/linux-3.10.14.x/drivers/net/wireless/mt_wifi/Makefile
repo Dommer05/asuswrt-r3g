@@ -1,6 +1,6 @@
-RT_DRV_DIR  := ralink/mt76x3
+RT_DRV_DIR  := mt76x3
 RT_DRV_PATH := ../mt76x3
-RT_DRV_NAME := mt76x3_ap
+RT_DRV_NAME := mt_wifi
 
 obj-$(CONFIG_MT76X3_AP) += $(RT_DRV_NAME).o
 $(RT_DRV_NAME)-objs += $(RT_DRV_PATH)/common/crypt_md5.o

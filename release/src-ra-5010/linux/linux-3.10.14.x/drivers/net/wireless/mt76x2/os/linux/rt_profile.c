@@ -26,8 +26,8 @@
 #include "rt_config.h"
 
 #if defined(CONFIG_RA_HW_NAT) || defined(CONFIG_RA_HW_NAT_MODULE)
-#include "../../../../../../../net/nat/hw_nat/ra_nat.h"
-#include "../../../../../../../net/nat/hw_nat/frame_engine.h"
+#include "../../../../../net/nat/hw_nat/ra_nat.h"
+#include "../../../../../net/nat/hw_nat/frame_engine.h"
 #endif
 
 
@@ -85,35 +85,6 @@ struct dev_id_name_map{
 VOID get_dev_config_idx(RTMP_ADAPTER *pAd)
 {
 	INT idx = 0;
-
-#if defined (DRIVER_HAS_MULTI_DEV)
-	INT first_card = 0, second_card = 0;
-	static int probe_cnt = 1;
-
-	A2Hex(first_card, FIRST_CHIP_ID);
-	A2Hex(second_card, SECOND_CHIP_ID);
-
-	if (first_card == second_card) {
-		idx = probe_cnt;
-		probe_cnt--;
-	} else if (IS_MT76x2(pAd)) {
-		UINT32 chip_id = (pAd->ChipID >> 16);
-		if (chip_id == second_card)
-			idx = 1;
-	} else {
-#ifdef RT6352
-		if (IS_RT6352(pAd))
-			idx = 0;
-		else
-#endif
-		if (IS_RT8592(pAd))
-			idx = 0;
-		else if (IS_RT5392(pAd) || IS_MT76x0(pAd))
-			idx = 1;
-	}
-
-	printk("chip_id1=0x%x, chip_id2=0x%x, pAd->MACVersion=0x%x, pAd->ChipID=0x%x, dev_idx=%d\n", first_card, second_card, pAd->MACVersion, pAd->ChipID, idx);
-#endif
 
 	pAd->dev_idx = idx;
 }

@@ -520,7 +520,7 @@ INT APSendPacket(RTMP_ADAPTER *pAd, PNDIS_PACKET pPacket)
 		if (((InIgmpGroup == IGMP_IN_GROUP) && pGroupEntry && (IgmpMemberCnt(&pGroupEntry->MemberList) > 0)) ||
 		     (InIgmpGroup == IGMP_PKT))
 		{
-			NDIS_STATUS PktCloneResult = IgmpPktClone(pAd, pSrcBufVA, pPacket, InIgmpGroup, pGroupEntry, QueIdx, UserPriority);
+			NDIS_STATUS PktCloneResult = IgmpPktClone(pAd, pPacket, InIgmpGroup, pGroupEntry, QueIdx, UserPriority);
 			RELEASE_NDIS_PACKET(pAd, pPacket, NDIS_STATUS_SUCCESS);
 			return PktCloneResult;
 		}

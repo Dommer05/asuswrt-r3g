@@ -74,7 +74,6 @@ config  MT76X2_AP_CON_WPS_SUPPORT
 config  MT76X2_AP_DFS
 	bool "DFS support"
 	depends on MT76X2_AP
-	depends on (RT_FIRST_IF_MT7612E || RT_SECOND_IF_MT7612E)
 	default y
 
 config  MT76X2_AP_CARRIER
@@ -120,13 +119,11 @@ config  MT76X2_AP_80211N_DRAFT3
 config  MT76X2_AP_80211AC_VHT
 	bool "802.11ac support"
 	depends on MT76X2_AP
-	depends on (RT_FIRST_IF_MT7612E || RT_SECOND_IF_MT7612E)
 	default y
 
 config  MT76X2_AP_TXBF_SUPPORT
 	bool "Tx Beam Forming support"
 	depends on MT76X2_AP
-	depends on (RT_FIRST_IF_MT7612E || RT_SECOND_IF_MT7612E)
 	default y
 
 config  MT76X2_AP_80211W_PMF
