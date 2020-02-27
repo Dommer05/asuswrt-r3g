@@ -45,6 +45,25 @@ typedef struct _RT8592_FREQ_ITEM {
 } RT8592_FREQ_ITEM;
 
 
+#ifdef RT8592
+VOID RT85592_Init(struct _RTMP_ADAPTER *pAd);
+INT RT85592_DisableTxRx(struct _RTMP_ADAPTER *pAd, UCHAR Level);
+VOID RT85592ReadTxPwrPerRate(struct _RTMP_ADAPTER *pAd);
+INT RT85592_ReadChannelPwr(struct _RTMP_ADAPTER *pAd);
+
+
+#ifdef RTMP_TEMPERATURE_COMPENSATION
+INT rx_temp_compensation(struct _RTMP_ADAPTER *pAd);
+#endif /* RTMP_TEMPERATURE_COMPENSATION */
+
+INT bw_filter_cal(struct _RTMP_ADAPTER *pAd);
+
+INT rt85592_lna_gain_adjust(struct _RTMP_ADAPTER *pAd, CHAR gain);
+#ifndef WFA_VHT_PF
+INT rt85592_cca_adjust(struct _RTMP_ADAPTER *pAd);
+#endif /* WFA_VHT_PF */
+
+#endif /* RT8592 */
 
 #endif /* __RT8592_H__ */
 

@@ -83,8 +83,8 @@
  	So, the WEP and TKIP shall not be allowed to use HT rate. 
  */
 #define IS_INVALID_HT_SECURITY(_mode)		\
-	(((_mode) == Ndis802_11Encryption1Enabled) || \
-	 ((_mode) == Ndis802_11Encryption2Enabled))
+	(((_mode) == Ndis802_11WEPEnabled) || \
+	 ((_mode) == Ndis802_11TKIPEnable))
 
 #define MIX_CIPHER_WPA_TKIP_ON(x)       (((x) & 0x08) != 0)
 #define MIX_CIPHER_WPA_AES_ON(x)        (((x) & 0x04) != 0)
@@ -146,6 +146,7 @@
 #if defined(CONFIG_AP_SUPPORT) && defined(CONFIG_STA_SUPPORT)
 #define WPA_GET_BSS_NUM(_pAd)		(((_pAd)->OpMode == OPMODE_AP) ? (_pAd)->ApCfg.BssidNum : 1)
 #define WPA_GET_GROUP_CIPHER(_pAd, _pEntry, _cipher)					\
+	do																\
 	{																	\
 	_cipher = Ndis802_11WEPDisabled;								\
 		if ((_pAd)->OpMode == OPMODE_AP)								\
@@ -154,35 +155,36 @@
 			((_pEntry)->wdev_idx < MAX_APCLI_NUM))			\
 			_cipher = (_pAd)->ApCfg.ApCliTab[(_pEntry)->wdev_idx].GroupCipher;	\
 			else if ((_pEntry)->apidx < (_pAd)->ApCfg.BssidNum)			\
-				_cipher = (_pAd)->ApCfg.MBSSID[_pEntry->apidx].GroupKeyWepStatus;\
+				_cipher = (_pAd)->ApCfg.MBSSID[_pEntry->apidx].wdev.GroupKeyWepStatus;\
 		}																\
 		else															\
 			_cipher = (_pAd)->StaCfg.GroupCipher;						\
-	}
-
+	}while(0)
 #define WPA_BSSID(_pAd, _apidx) 	(((_pAd)->OpMode == OPMODE_AP) ?\
 									(_pAd)->ApCfg.MBSSID[_apidx].Bssid :\
 									(_pAd)->CommonCfg.Bssid)
 #elif defined(CONFIG_AP_SUPPORT)
 #define WPA_GET_BSS_NUM(_pAd)		(_pAd)->ApCfg.BssidNum
 #define WPA_GET_GROUP_CIPHER(_pAd, _pEntry, _cipher)				\
+	do 															\
 	{																\
 	_cipher = Ndis802_11WEPDisabled;							\
 	if (IS_ENTRY_APCLI(_pEntry) && 								\
 		((_pEntry)->wdev_idx < MAX_APCLI_NUM))			\
 		_cipher = (_pAd)->ApCfg.ApCliTab[(_pEntry)->wdev_idx].GroupCipher;	\
 		else if ((_pEntry)->apidx < (_pAd)->ApCfg.BssidNum)			\
-			_cipher = (_pAd)->ApCfg.MBSSID[_pEntry->apidx].GroupKeyWepStatus;\
-	}
+			_cipher = (_pAd)->ApCfg.MBSSID[_pEntry->apidx].wdev.GroupKeyWepStatus;\
+	}while(0)
 
 #define WPA_BSSID(_pAd, _apidx) 	(_pAd)->ApCfg.MBSSID[_apidx].Bssid
 
 #elif defined(CONFIG_STA_SUPPORT)
 #define WPA_GET_BSS_NUM(_pAd)		1
 #define WPA_GET_GROUP_CIPHER(_pAd, _pEntry, _cipher)				\
+	do															\
 	{																\
 		_cipher = (_pAd)->StaCfg.GroupCipher;						\
-	}
+	}while(0)
 #define WPA_BSSID(_pAd, _apidx) 	(_pAd)->CommonCfg.Bssid
 #endif /* defined(CONFIG_STA_SUPPORT) */
 

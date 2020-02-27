@@ -278,8 +278,6 @@ VOID WpaEAPOLKeyAction(
 		{
 			DBGPRINT(RT_DEBUG_OFF, ("%s: CliIdx != 0xFF  ifIndex(%d), CliIdx(%d) !!!\n",
 								__FUNCTION__,ifIndex, CliIdx));
-			
-			UCHAR MacTabMax = MAX_LEN_OF_MAC_TABLE;
 
 			if ((pAd->ApCfg.ApCliTab[ifIndex].RepeaterCli[CliIdx].CliValid == FALSE) ||
 				(pAd->ApCfg.ApCliTab[ifIndex].RepeaterCli[CliIdx].CliEnable == FALSE) ||
@@ -300,7 +298,7 @@ VOID WpaEAPOLKeyAction(
 		else
 #endif /* MAC_REPEATER_SUPPORT */
 		{
-			DBGPRINT(RT_DEBUG_TRACE, ("%s: CliIdx == 0xFF  pHeader->Addr2(%02X-%02X-%02X-%02X-%02X-%02X) !!!\n",
+			DBGPRINT(RT_DEBUG_OFF, ("%s: CliIdx == 0xFF  pHeader->Addr2(%02X-%02X-%02X-%02X-%02X-%02X) !!!\n",
 								__FUNCTION__,PRINT_MAC(pHeader->Addr2)));
 			pEntry = MacTableLookup(pAd, pHeader->Addr2);
 		}
@@ -347,7 +345,7 @@ VOID WpaEAPOLKeyAction(
 		if (pEntry->AuthMode < Ndis802_11AuthModeWPA)
 			break;		
 
-		DBGPRINT(RT_DEBUG_TRACE, ("Receive EAPoL-Key frame from STA %02X-%02X-%02X-%02X-%02X-%02X wcid(%d)\n", PRINT_MAC(pEntry->Addr), pEntry->wcid));
+		DBGPRINT(RT_DEBUG_OFF, ("Receive EAPoL-Key frame from STA %02X-%02X-%02X-%02X-%02X-%02X wcid(%d)\n", PRINT_MAC(pEntry->Addr), pEntry->wcid));
 
 		if (eapol_len > Elem->MsgLen - LENGTH_802_11 - LENGTH_802_1_H)
 		{
@@ -651,6 +649,13 @@ VOID RTMPToWirelessSta(
 			RTMP_SET_PACKET_NET_DEVICE_MBSSID(pPacket, pEntry->apidx);
 
 		RTMP_SET_PACKET_WCID(pPacket, (UCHAR)pEntry->wcid);
+		// TODO: shiang-usw, fix this!
+		if (!pEntry->wdev) {
+			RELEASE_NDIS_PACKET(pAd, pPacket, NDIS_STATUS_FAILURE);
+			break;
+		}
+
+		RTMP_SET_PACKET_WDEV(pPacket, pEntry->wdev->wdev_idx);
 		RTMP_SET_PACKET_MOREDATA(pPacket, FALSE);
 
 #ifdef CONFIG_AP_SUPPORT
@@ -670,8 +675,6 @@ VOID RTMPToWirelessSta(
 			Status = STASendPacket(pAd, pPacket);
 			if (Status == NDIS_STATUS_SUCCESS)
 			{
-				UCHAR   Index;
-				
 				/* Dequeue one frame from TxSwQueue0..3 queue and process it*/
 				/* There are three place calling dequeue for TX ring.*/
 				/* 1. Here, right after queueing the frame.*/
@@ -815,7 +818,6 @@ BOOLEAN PeerWpaMessageSanity(
 			UINT mlen = AES_KEY128_LENGTH;
 			AES_CMAC((PUCHAR)pMsg, eapol_len, pEntry->PTK, LEN_PTK_KCK, mic, &mlen);
 
-#ifdef DBG
 			{
 				unsigned char *tmp = (unsigned char *)pEntry->PTK;
 				int k=0;
@@ -824,7 +826,6 @@ BOOLEAN PeerWpaMessageSanity(
 					printk("%02x", *(tmp+k));
 				printk("\n");
 			}
-#endif
 		}
         
 	
@@ -1226,8 +1227,9 @@ VOID PeerPairMsg1Action(
 	/* Generate random SNonce*/
 	GenRandom(pAd, (UCHAR *)pCurrentAddr, pEntry->SNonce);
 	pEntry->AllowInsPTK = TRUE;
-	pEntry->LastGroupKeyId = 0;
-	NdisZeroMemory(pEntry->LastGTK, 32);
+        pEntry->LastGroupKeyId = 0;
+	pEntry->AllowUpdateRSC = FALSE;
+        NdisZeroMemory(pEntry->LastGTK, MAX_LEN_GTK);
 
 #ifdef DOT11R_FT_SUPPORT	
 	if (IS_FT_RSN_STA(pEntry))
@@ -1639,6 +1641,7 @@ VOID WPAPairMsg3Retry(
 	UCHAR				default_key = 0;
 	UCHAR				group_cipher = Ndis802_11WEPDisabled;
 	PUINT8				rsnie_ptr = NULL;
+
 	UCHAR				rsnie_len = 0;
 	UCHAR 				TxTsc[6];
 	UCHAR               Header802_3[LENGTH_802_3];
@@ -1782,6 +1785,8 @@ VOID PeerPairMsg3Action(
 	USHORT ifIndex = (USHORT)(Elem->Priv);
 	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
+	UCHAR idx = 0;
+	BOOLEAN bWPA2 = FALSE;
 
 	DBGPRINT(RT_DEBUG_TRACE, ("===> PeerPairMsg3Action \n"));
 	
@@ -1842,6 +1847,18 @@ VOID PeerPairMsg3Action(
 	if (PeerWpaMessageSanity(pAd, pMsg3, MsgLen, EAPOL_PAIR_MSG_3, pEntry) == FALSE)
 		return;
 	
+	if (group_cipher == Ndis802_11AESEnable)
+		bWPA2 = TRUE;
+	if ((pEntry->AllowInsPTK == TRUE) && bWPA2) {
+		pEntry->CCMP_BC_PN = 0;
+		pEntry->init_ccmp_bc_pn_passed = FALSE;
+		for (idx = 0; idx < LEN_KEY_DESC_RSC; idx++)
+			pEntry->CCMP_BC_PN += (pMsg3->KeyDesc.KeyRsc[idx] << (idx*8));
+		pEntry->AllowUpdateRSC = FALSE;
+		DBGPRINT(RT_DEBUG_OFF, ("%s(%d): update CCMP_BC_PN to %llu\n",
+			__func__, pEntry->wcid, pEntry->CCMP_BC_PN ));		
+	}
+	
 	/* Save Replay counter, it will use construct message 4*/
 	NdisMoveMemory(pEntry->R_Counter, pMsg3->KeyDesc.ReplayCounter, LEN_KEY_DESC_REPLAY);
 
@@ -1881,15 +1898,16 @@ VOID PeerPairMsg3Action(
 	IF_DEV_CONFIG_OPMODE_ON_AP(pAd)
 	{
 #ifdef APCLI_SUPPORT
-		if (IS_ENTRY_APCLI(pEntry)) {
-			if(pEntry->AllowInsPTK == TRUE) {
-				APCliInstallPairwiseKey(pAd, pEntry);
-				pEntry->AllowInsPTK = FALSE;
-			} else {
-				DBGPRINT(RT_DEBUG_ERROR, ("!!!%s : the M3 reinstall attack, skip install key\n",
-						__func__));
-			}
+	    if (IS_ENTRY_APCLI(pEntry)) {
+		if(pEntry->AllowInsPTK == TRUE) {
+		 	APCliInstallPairwiseKey(pAd, pEntry);
+			pEntry->AllowInsPTK = FALSE;
+			pEntry->AllowUpdateRSC = TRUE;
+		} else {
+			DBGPRINT(RT_DEBUG_ERROR, ("!!!%s : the M3 reinstall attack, skip install key\n",
+											__func__));
 		}
+	    }
 #endif /* APCLI_SUPPORT */
 	}
 #endif /* CONFIG_AP_SUPPORT */
@@ -2038,9 +2056,11 @@ VOID PeerPairMsg4Action(
     IN MLME_QUEUE_ELEM  *Elem) 
 {    
 	PEAPOL_PACKET   	pMsg4;    
-	UINT            	MsgLen;
-	BOOLEAN             Cancelled;
-	UCHAR				group_cipher = Ndis802_11WEPDisabled;
+    UINT            	MsgLen;
+    BOOLEAN             Cancelled;
+#ifdef CONFIG_AP_SUPPORT
+    UCHAR				group_cipher = Ndis802_11WEPDisabled;
+#endif /* CONFIG_AP_SUPPORT */
 
     DBGPRINT(RT_DEBUG_TRACE, ("===> PeerPairMsg4Action\n"));
 
@@ -2076,6 +2096,10 @@ VOID PeerPairMsg4Action(
         /* Sanity Check peer Pairwise message 4 - Replay Counter, MIC*/
 		if (PeerWpaMessageSanity(pAd, pMsg4, MsgLen, EAPOL_PAIR_MSG_4, pEntry) == FALSE)
 			break;
+
+	/* Sanity Check pEntry->apidx to avoid out of bound with pAd->ApCfg.MBSSID*/
+	if (pEntry->apidx >= HW_BEACON_MAX_NUM)
+		break;
 
         /* 3. Install pairwise key */
 		WPAInstallPairwiseKey(pAd, pEntry->apidx, pEntry, TRUE);
@@ -2215,8 +2239,16 @@ VOID PeerPairMsg4Action(
 #endif /* SMART_MESH_MONITOR */			
 #endif /* CONFIG_AP_SUPPORT */
 
+#ifdef IAPP_SUPPORT
+			if (IS_ENTRY_CLIENT(pEntry)) {
+			    IAPP_L2_Update_Frame_Send(pAd, pEntry->Addr, pEntry->apidx);
+			    DBGPRINT(RT_DEBUG_TRACE, ("####### Send L2 Frame Mac=%02x:%02x:%02x:%02x:%02x:%02x for update ARP table at DS\n",PRINT_MAC(pEntry->Addr)));
+			}
+#endif /* IAPP_SUPPORT */
+
 			/* send wireless event - for set key done WPA2*/
-				RTMPSendWirelessEvent(pAd, IW_SET_KEY_DONE_WPA2_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
+			RTMPSendWirelessEvent(pAd, IW_SET_KEY_DONE_WPA2_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
+
 #ifdef CONFIG_HOTSPOT_R2
 		if (pEntry->IsWNMReqValid == TRUE)
 		{
@@ -2244,13 +2276,6 @@ VOID PeerPairMsg4Action(
 			printk("!!!!msg 4 send btm req\n");
 		}
 #endif	 
-	 
-	 
-	        DBGPRINT(RT_DEBUG_TRACE, ("AP SETKEYS DONE - WPA2, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
-									pEntry->AuthMode, GetAuthMode(pEntry->AuthMode), 
-									pEntry->WepStatus, GetEncryptType(pEntry->WepStatus), 
-									group_cipher, 
-									GetEncryptType(group_cipher)));
 		}
 		else
 		{
@@ -2402,6 +2427,7 @@ VOID	PeerGroupMsg1Action(
 	UCHAR CliIdx = 0xFF;
 #endif /* MAC_REPEATER_SUPPORT */
 	
+	UCHAR idx = 0;
 	DBGPRINT(RT_DEBUG_TRACE, ("===> PeerGroupMsg1Action \n"));
 
 	if ((!pEntry) || (!IS_ENTRY_CLIENT(pEntry) && !IS_ENTRY_APCLI(pEntry)))
@@ -2456,6 +2482,15 @@ VOID	PeerGroupMsg1Action(
 	/* Sanity Check peer group message 1 - Replay Counter, MIC, RSNIE*/
 	if (PeerWpaMessageSanity(pAd, pGroup, MsgLen, EAPOL_GROUP_MSG_1, pEntry) == FALSE)
 		return;
+	if (pEntry->AllowUpdateRSC == TRUE) {
+		pEntry->CCMP_BC_PN = 0;
+		pEntry->init_ccmp_bc_pn_passed = FALSE;
+		for (idx = 0; idx < LEN_KEY_DESC_RSC; idx++)
+			pEntry->CCMP_BC_PN += (pGroup->KeyDesc.KeyRsc[idx] << (idx*8)); 
+		pEntry->AllowUpdateRSC = FALSE;
+		DBGPRINT(RT_DEBUG_TRACE, ("%s(%d): update CCMP_BC_PN to %llu\n",
+			__func__, pEntry->wcid, pEntry->CCMP_BC_PN ));
+	}
 
 	/* delete retry timer*/
 #ifdef CONFIG_AP_SUPPORT
@@ -2618,8 +2653,10 @@ VOID EnqueueStartForPSKExec(
     IN PVOID SystemSpecific3) 
 {
 	MAC_TABLE_ENTRY     *pEntry = (PMAC_TABLE_ENTRY) FunctionContext;
+	if(!pEntry)
+		return;
 
-	if ((pEntry) && IS_ENTRY_CLIENT(pEntry) && (pEntry->WpaState < AS_PTKSTART))
+	if (IS_ENTRY_CLIENT(pEntry) && (pEntry->WpaState < AS_PTKSTART))
 	{
 		PRTMP_ADAPTER pAd = (PRTMP_ADAPTER)pEntry->pAd;
 
@@ -2753,10 +2790,12 @@ VOID PeerGroupMsg2Action(
     UINT            	Len;
     PUCHAR          	pData;
     BOOLEAN         	Cancelled;
-	PEAPOL_PACKET       pMsg2;	
-	UCHAR				group_cipher = Ndis802_11WEPDisabled;	
+    PEAPOL_PACKET       pMsg2;
+#ifdef CONFIG_AP_SUPPORT
+    UCHAR				group_cipher = Ndis802_11WEPDisabled;
+#endif /* CONFIG_AP_SUPPORT */
 
-	DBGPRINT(RT_DEBUG_TRACE, ("===> PeerGroupMsg2Action \n"));
+    DBGPRINT(RT_DEBUG_TRACE, ("===> PeerGroupMsg2Action \n"));
 
     if ((!pEntry) || !IS_ENTRY_CLIENT(pEntry))
         return;
@@ -2802,11 +2841,6 @@ VOID PeerGroupMsg2Action(
 		{
 			/* send wireless event - for set key done WPA2*/
 				RTMPSendWirelessEvent(pAd, IW_SET_KEY_DONE_WPA2_EVENT_FLAG, pEntry->Addr, pEntry->apidx, 0); 
-
-			DBGPRINT(RT_DEBUG_TRACE, ("AP SETKEYS DONE - WPA2, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
-										pEntry->AuthMode, GetAuthMode(pEntry->AuthMode), 
-										pEntry->WepStatus, GetEncryptType(pEntry->WepStatus), 
-										group_cipher, GetEncryptType(group_cipher)));
 		}
 		else
 		{
@@ -2840,11 +2874,6 @@ VOID PeerGroupMsg2Action(
 										NULL, (PUCHAR)&drvevnt.data.join, sizeof(drvevnt.data.join));
 			}
 #endif /* SMART_MESH_MONITOR */
-
-        	DBGPRINT(RT_DEBUG_TRACE, ("AP SETKEYS DONE - WPA1, AuthMode(%d)=%s, WepStatus(%d)=%s, GroupWepStatus(%d)=%s\n\n", 
-										pEntry->AuthMode, GetAuthMode(pEntry->AuthMode), 
-										pEntry->WepStatus, GetEncryptType(pEntry->WepStatus), 
-										group_cipher, GetEncryptType(group_cipher)));
 		}	
     }while(FALSE);  
 }
@@ -4659,9 +4688,10 @@ BOOLEAN RTMPParseEapolKeyData(
 				}
 				pEntry->LastGroupKeyId = DefaultIdx;
 				NdisMoveMemory(pEntry->LastGTK, GTK, MAX_LEN_GTK);
+				pEntry->AllowUpdateRSC = TRUE;
 			} else {
 				DBGPRINT(RT_DEBUG_ERROR, ("!!!%s : the Group reinstall attack, skip install key\n",
-						__func__));
+					__func__));
 			}
 		}
 #endif /* APCLI_SUPPORT */
@@ -5009,7 +5039,7 @@ VOID	ConstructEapolKeyData(
 	IN	UCHAR			RSNIE_LEN,
 	OUT PEAPOL_PACKET   pMsg)
 {
-	UCHAR		*mpool, *Key_Data, *eGTK;  	  
+	UCHAR		*mpool = NULL, *Key_Data, *eGTK;  	  
 	ULONG		data_offset;
 	BOOLEAN		bWPA2Capable = FALSE;
 	BOOLEAN		GTK_Included = FALSE;
